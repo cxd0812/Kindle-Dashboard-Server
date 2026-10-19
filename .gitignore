@@ -11,3 +11,5 @@ wheels/
 
 initial_plan.md
 .env
+data/
+*.tmp

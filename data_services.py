@@ -1,15 +1,22 @@
 import requests
 import datetime
 from zoneinfo import ZoneInfo
-import yfinance as yf
+try:
+    import yfinance as yf
+except ImportError:
+    yf = None
 from lunardate import LunarDate
 import holidays
 import io
 import base64
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import matplotlib
-matplotlib.use('Agg') # Non-interactive mode
-from matplotlib.figure import Figure
+try:
+    import matplotlib
+    matplotlib.use('Agg') # Non-interactive mode
+    from matplotlib.figure import Figure
+except ImportError:
+    matplotlib = None
+    Figure = None
 import time
 import threading
 import math
@@ -40,8 +47,8 @@ class SimpleCache:
 
 # Caches
 weather_cache = SimpleCache(Config.CACHE_TTL_WEATHER)
-finance_cache = SimpleCache(Config.CACHE_TTL_FINANCE) 
-news_cache = SimpleCache(Config.CACHE_TTL_NEWS)
+finance_cache = SimpleCache(getattr(Config, 'CACHE_TTL_FINANCE', 900)) 
+news_cache = SimpleCache(getattr(Config, 'CACHE_TTL_NEWS', 300))
 
 # --- Helpers ---
 def map_wmo_to_text(code):
@@ -78,15 +85,95 @@ def get_distance(lat1, lon1, lat2, lon2):
 
 # --- Data Fetchers ---
 
-def get_location_name(lat, lon):
+# --- IP Geolocation Utility ---
+_ip_location_cache = {"data": None, "timestamp": 0}
+IP_LOCATION_TTL = 3600 * 6  # 6 hours cache
+
+def get_ip_location():
+    global _ip_location_cache
+    now = time.time()
+    if _ip_location_cache["data"] and (now - _ip_location_cache["timestamp"] < IP_LOCATION_TTL):
+        return _ip_location_cache["data"]
+
+    if not Config.AUTO_LOCATION:
+        fallback = {
+            "lat": Config.LATITUDE,
+            "lon": Config.LONGITUDE,
+            "city": Config.CITY_NAME,
+            "timezone": Config.TIMEZONE
+        }
+        _ip_location_cache = {"data": fallback, "timestamp": now}
+        return fallback
+
+    # 1. Primary: ip-api.com
+    lang_param = "zh-CN" if Config.LANGUAGE == "CN" else "en"
+    try:
+        resp = requests.get(f"http://ip-api.com/json/?lang={lang_param}", timeout=4)
+        if resp.status_code == 200:
+            data = resp.json()
+            if data.get("status") == "success":
+                city = data.get("city") or data.get("regionName") or Config.CITY_NAME
+                res = {
+                    "lat": float(data.get("lat", Config.LATITUDE)),
+                    "lon": float(data.get("lon", Config.LONGITUDE)),
+                    "city": city,
+                    "timezone": data.get("timezone", Config.TIMEZONE)
+                }
+                _ip_location_cache = {"data": res, "timestamp": now}
+                print(f"[IP Location] Successfully resolved: {res}")
+                return res
+    except Exception as e:
+        print(f"[IP Location] ip-api.com failed: {e}")
+
+    # 2. Secondary: ipinfo.io
+    try:
+        resp = requests.get("https://ipinfo.io/json", timeout=4)
+        if resp.status_code == 200:
+            data = resp.json()
+            loc_parts = data.get("loc", "").split(",")
+            if len(loc_parts) == 2:
+                res = {
+                    "lat": float(loc_parts[0]),
+                    "lon": float(loc_parts[1]),
+                    "city": data.get("city") or Config.CITY_NAME,
+                    "timezone": data.get("timezone", Config.TIMEZONE)
+                }
+                _ip_location_cache = {"data": res, "timestamp": now}
+                print(f"[IP Location] Successfully resolved via ipinfo: {res}")
+                return res
+    except Exception as e:
+        print(f"[IP Location] ipinfo.io failed: {e}")
+
+    # 3. Fallback to Config
+    fallback = {
+        "lat": Config.LATITUDE,
+        "lon": Config.LONGITUDE,
+        "city": Config.CITY_NAME,
+        "timezone": Config.TIMEZONE
+    }
+    _ip_location_cache = {"data": fallback, "timestamp": now}
+    print(f"[IP Location] Using fallback config location: {fallback}")
+    return fallback
+
+def get_location_name(lat=None, lon=None):
+    if Config.AUTO_LOCATION:
+        return get_ip_location()["city"]
     return Config.CITY_NAME
 
-def get_weather(lat=Config.LATITUDE, lon=Config.LONGITUDE):
+def get_weather(lat=None, lon=None):
+    loc = get_ip_location()
+    if lat is None:
+        lat = loc["lat"]
+    if lon is None:
+        lon = loc["lon"]
+    city_name = loc["city"]
+    tz = loc.get("timezone", Config.TIMEZONE)
+
     cached = weather_cache.get(f'weather_data_{lat}_{lon}')
     if cached: return cached
 
     weather_data = {
-        "location": {"name": get_location_name(lat, lon)}, 
+        "location": {"name": city_name}, 
         "current": {
             "temp": "--", 
             "humidity": "--", 
@@ -110,7 +197,7 @@ def get_weather(lat=Config.LATITUDE, lon=Config.LONGITUDE):
             "current": "temperature_2m,relative_humidity_2m,weather_code,uv_index",
             "hourly": "temperature_2m,weather_code,precipitation_probability",
             "daily": "weather_code,temperature_2m_max,temperature_2m_min,uv_index_max",
-            "timezone": Config.TIMEZONE
+            "timezone": tz
         }
         
         resp = requests.get(url, params=params, timeout=10).json()
@@ -136,7 +223,7 @@ def get_weather(lat=Config.LATITUDE, lon=Config.LONGITUDE):
                 "latitude": lat,
                 "longitude": lon,
                 "current": "pm2_5,pm10,us_aqi",
-                "timezone": Config.TIMEZONE
+                "timezone": tz
             }
             aqi_resp = requests.get(aqi_url, params=aqi_params, timeout=10).json()
             aqi_current = aqi_resp.get("current", {})
@@ -632,7 +719,11 @@ WEEKDAYS_CN = {
 }
 
 def get_calendar_info():
-    now = datetime.datetime.now(ZoneInfo(Config.TIMEZONE))
+    tz_name = get_ip_location().get("timezone") or Config.TIMEZONE
+    try:
+        now = datetime.datetime.now(ZoneInfo(tz_name))
+    except Exception:
+        now = datetime.datetime.now(ZoneInfo(Config.TIMEZONE))
     lunar = LunarDate.fromSolarDate(now.year, now.month, now.day)
     
     if Config.LANGUAGE == 'EN':

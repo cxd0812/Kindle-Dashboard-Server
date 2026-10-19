@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>待办事项管理 - Kindle Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+            background-color: #f3f4f6;
+        }
+    </style>
+</head>
+<body class="min-h-screen py-6 px-4 sm:px-6 lg:px-8">
+    <div class="max-w-2xl mx-auto">
+        
+        <!-- Header Card -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-black text-gray-900 flex items-center gap-2">
+                        <span>📝 待办事项管理</span>
+                    </h1>
+                    <p class="text-sm text-gray-500 mt-1">
+                        此处增删改查将实时同步到 Kindle 墨水屏仪表盘
+                    </p>
+                </div>
+                <div class="flex gap-2">
+                    <a href="/dashboard" target="_blank" class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg font-bold transition">
+                        预览看板 ↗
+                    </a>
+                    <a href="/render" target="_blank" class="text-xs bg-black hover:bg-gray-800 text-white px-3 py-2 rounded-lg font-bold transition">
+                        墨水屏图 ↗
+                    </a>
+                </div>
+            </div>
+
+            <!-- Stats Bar -->
+            <div class="grid grid-cols-3 gap-3 mt-6 pt-5 border-t border-gray-100 text-center">
+                <div class="bg-gray-50 rounded-xl p-3">
+                    <div class="text-xs text-gray-500 font-medium">总事项</div>
+                    <div id="stat-total" class="text-xl font-black text-gray-900 mt-0.5">{{ stats.total }}</div>
+                </div>
+                <div class="bg-amber-50 rounded-xl p-3">
+                    <div class="text-xs text-amber-600 font-medium">待完成</div>
+                    <div id="stat-pending" class="text-xl font-black text-amber-700 mt-0.5">{{ stats.pending }}</div>
+                </div>
+                <div class="bg-emerald-50 rounded-xl p-3">
+                    <div class="text-xs text-emerald-600 font-medium">已完成</div>
+                    <div id="stat-completed" class="text-xl font-black text-emerald-700 mt-0.5">{{ stats.completed }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Input Form -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-4 mb-6">
+            <form id="add-form" class="flex gap-2" onsubmit="event.preventDefault(); handleAddTodo();">
+                <input 
+                    type="text" 
+                    id="new-todo-input" 
+                    placeholder="添加新的待办事项，按回车添加..." 
+                    class="flex-1 px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-black focus:border-transparent text-base"
+                    autocomplete="off"
+                    required
+                >
+                <button 
+                    type="submit" 
+                    class="bg-black hover:bg-gray-800 text-white font-bold px-6 py-3 rounded-xl transition flex items-center justify-center whitespace-nowrap active:scale-95"
+                >
+                    + 添加
+                </button>
+            </form>
+        </div>
+
+        <!-- Filter & Batch Actions Bar -->
+        <div class="flex items-center justify-between mb-4 px-1">
+            <div class="flex gap-1 bg-gray-200 p-1 rounded-xl text-sm font-bold">
+                <button onclick="setFilter('all')" id="filter-all" class="filter-btn px-3 py-1.5 rounded-lg bg-white shadow-sm text-gray-900">全部</button>
+                <button onclick="setFilter('pending')" id="filter-pending" class="filter-btn px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900">待完成</button>
+                <button onclick="setFilter('completed')" id="filter-completed" class="filter-btn px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900">已完成</button>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="handleClearCompleted()" class="text-xs text-gray-500 hover:text-red-600 font-medium px-2 py-1 transition">
+                    清理已完成
+                </button>
+                <button onclick="handleRefreshCache()" class="text-xs text-gray-500 hover:text-black font-medium px-2 py-1 transition">
+                    🔄 刷新缓存
+                </button>
+            </div>
+        </div>
+
+        <!-- Todos List Container -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden divide-y divide-gray-100" id="todo-list">
+            {% if todos|length == 0 %}
+            <div class="p-12 text-center text-gray-400">
+                <div class="text-4xl mb-2">☕</div>
+                <div class="font-bold">暂无待办事项</div>
+                <div class="text-xs text-gray-400 mt-1">在上方输入框添加新任务吧</div>
+            </div>
+            {% else %}
+            {% for item in todos %}
+            <div class="todo-item p-4 flex items-center justify-between hover:bg-gray-50 transition group" data-id="{{ item.id }}" data-completed="{{ 'true' if item.completed else 'false' }}">
+                <div class="flex items-center gap-3 flex-1 min-w-0 mr-3 cursor-pointer" onclick="handleToggle('{{ item.id }}')">
+                    <input 
+                        type="checkbox" 
+                        class="w-5 h-5 rounded border-gray-300 text-black focus:ring-black cursor-pointer"
+                        {% if item.completed %}checked{% endif %}
+                        onclick="event.stopPropagation(); handleToggle('{{ item.id }}')"
+                    >
+                    <span class="todo-text text-base break-words flex-1 {% if item.completed %}line-through text-gray-400{% else %}text-gray-900 font-medium{% endif %}">
+                        {{ item.text }}
+                    </span>
+                </div>
+                <div class="flex items-center gap-2 shrink-0">
+                    <span class="text-xs text-gray-400 hidden sm:inline">{{ item.created_at }}</span>
+                    <button 
+                        onclick="handleDelete('{{ item.id }}')" 
+                        class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                        title="删除"
+                    >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            {% endfor %}
+            {% endif %}
+        </div>
+
+        <!-- Toast Tip -->
+        <div id="toast" class="fixed bottom-6 right-6 bg-black text-white text-sm px-4 py-2.5 rounded-xl shadow-lg transform transition-all duration-300 opacity-0 pointer-events-none translate-y-3">
+            提示信息
+        </div>
+
+    </div>
+
+    <script>
+        let currentFilter = 'all';
+
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            toast.innerText = msg;
+            toast.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-3');
+            setTimeout(() => {
+                toast.classList.add('opacity-0', 'pointer-events-none', 'translate-y-3');
+            }, 2000);
+        }
+
+        function updateStats(stats) {
+            if (!stats) return;
+            document.getElementById('stat-total').innerText = stats.total;
+            document.getElementById('stat-pending').innerText = stats.pending;
+            document.getElementById('stat-completed').innerText = stats.completed;
+        }
+
+        async function fetchTodos() {
+            try {
+                const res = await fetch('/api/todos');
+                const data = await res.json();
+                if (data.success) {
+                    renderTodoList(data.todos);
+                    updateStats(data.stats);
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        function renderTodoList(todos) {
+            const container = document.getElementById('todo-list');
+            if (todos.length === 0) {
+                container.innerHTML = `
+                    <div class="p-12 text-center text-gray-400">
+                        <div class="text-4xl mb-2">☕</div>
+                        <div class="font-bold">暂无待办事项</div>
+                        <div class="text-xs text-gray-400 mt-1">在上方输入框添加新任务吧</div>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = todos.map(item => {
+                const isCompleted = item.completed;
+                return `
+                <div class="todo-item p-4 flex items-center justify-between hover:bg-gray-50 transition group" data-id="${item.id}" data-completed="${isCompleted}">
+                    <div class="flex items-center gap-3 flex-1 min-w-0 mr-3 cursor-pointer" onclick="handleToggle('${item.id}')">
+                        <input 
+                            type="checkbox" 
+                            class="w-5 h-5 rounded border-gray-300 text-black focus:ring-black cursor-pointer"
+                            ${isCompleted ? 'checked' : ''}
+                            onclick="event.stopPropagation(); handleToggle('${item.id}')"
+                        >
+                        <span class="todo-text text-base break-words flex-1 ${isCompleted ? 'line-through text-gray-400' : 'text-gray-900 font-medium'}">
+                            ${escapeHtml(item.text)}
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <span class="text-xs text-gray-400 hidden sm:inline">${item.created_at || ''}</span>
+                        <button 
+                            onclick="handleDelete('${item.id}')" 
+                            class="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                            title="删除"
+                        >
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                `;
+            }).join('');
+
+            applyFilter();
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        async function handleAddTodo() {
+            const input = document.getElementById('new-todo-input');
+            const text = input.value.trim();
+            if (!text) return;
+
+            input.value = '';
+            try {
+                const res = await fetch('/api/todos', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('已添加待办事项');
+                    fetchTodos();
+                } else {
+                    alert(data.error || '添加失败');
+                }
+            } catch (err) {
+                alert('网络请求失败');
+            }
+        }
+
+        async function handleToggle(id) {
+            try {
+                const res = await fetch(`/api/todos/${id}/toggle`, {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    fetchTodos();
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        }
+
+        async function handleDelete(id) {
+            if (!confirm('确定删除此事项吗？')) return;
+            try {
+                const res = await fetch(`/api/todos/${id}`, {
+                    method: 'DELETE'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('已删除待办');
+                    fetchTodos();
+                }
+            } catch (err) {
+                alert('删除失败');
+            }
+        }
+
+        async function handleClearCompleted() {
+            if (!confirm('确定清空所有已完成的事项吗？')) return;
+            try {
+                const res = await fetch('/api/todos/clear-completed', {
+                    method: 'POST'
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('已清空已完成事项');
+                    fetchTodos();
+                }
+            } catch (err) {
+                alert('操作失败');
+            }
+        }
+
+        async function handleRefreshCache() {
+            try {
+                const res = await fetch('/api/cache/clear', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showToast('看板截图缓存已清空，Kindle 将获取最新图');
+                }
+            } catch (err) {
+                alert('刷新失败');
+            }
+        }
+
+        function setFilter(type) {
+            currentFilter = type;
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.className = 'filter-btn px-3 py-1.5 rounded-lg text-gray-600 hover:text-gray-900';
+            });
+            const activeBtn = document.getElementById(`filter-${type}`);
+            if (activeBtn) {
+                activeBtn.className = 'filter-btn px-3 py-1.5 rounded-lg bg-white shadow-sm text-gray-900 font-bold';
+            }
+            applyFilter();
+        }
+
+        function applyFilter() {
+            const items = document.querySelectorAll('.todo-item');
+            items.forEach(el => {
+                const isCompleted = el.getAttribute('data-completed') === 'true';
+                if (currentFilter === 'all') {
+                    el.style.display = 'flex';
+                } else if (currentFilter === 'pending') {
+                    el.style.display = isCompleted ? 'none' : 'flex';
+                } else if (currentFilter === 'completed') {
+                    el.style.display = isCompleted ? 'flex' : 'none';
+                }
+            });
+        }
+    </script>
+</body>
+</html>

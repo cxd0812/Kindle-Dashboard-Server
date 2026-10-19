@@ -5,38 +5,27 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kindle Oasis Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700;900&display=swap" rel="stylesheet">
     <style>
         /* E-Ink Optimization */
         body {
-            background-color: black; /* Border Color via Gap */
+            background-color: black;
             color: black;
-            font-family: 'Noto Sans SC', 'Helvetica Neue', Helvetica, Arial, sans-serif;
-            /* Oasis 2 Landscape Resolution */
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
             width: 1680px;
             height: 1264px;
             overflow: hidden;
             margin: 0;
             padding: 0;
-            /* Flex layout for the gap grid */
             display: flex;
             flex-direction: column;
-            gap: 4px; /* The "Border" thickness */
-            /* border: 4px solid black; Removed Outer Border */
+            gap: 4px;
             box-sizing: border-box;
         }
         
         .panel {
             background-color: white;
         }
-        
-        .sparkline {
-            filter: grayscale(100%) contrast(200%);
-        }
 
-        /* Prevent descender clipping: overflow:hidden clips at padding box edge,
-           so extra padding-bottom extends the visible area for descenders.
-           Negative margin-bottom cancels out the external layout impact. */
         .truncate, .line-clamp-2 {
             padding-bottom: 0.15em;
             margin-bottom: -0.15em;
@@ -46,10 +35,7 @@
 <body>
 
     <!-- Root Flex Container for 50/50 Split -->
-    <!-- Gap is 4px. Body height 1264. Gap 4. 
-         Available height = 1264. 
-         Minus gap 4 = 1260. 
-         Top/Bottom = 630px each. -->
+    <!-- Height 1264. Gap 4. Top/Bottom = 630px each -->
     <div class="flex flex-col flex-1 h-full gap-[4px]">
 
         <!-- TOP HALF (50%) -->
@@ -60,7 +46,7 @@
                 <!-- Top: Date Info -->
                 <div class="flex flex-row justify-between items-start">
                     <div>
-                         <div class="text-6xl font-bold mb-2 tracking-wide">
+                        <div class="text-6xl font-bold mb-2 tracking-wide">
                             {{ calendar.date_str }}
                         </div>
                         <!-- Weekday -->
@@ -71,12 +57,12 @@
                     <!-- Next Rest/Work Day -->
                     {% if calendar.next_day %}
                     <div class="text-right pt-2">
-                         <div class="flex items-baseline justify-end gap-4 mb-2">
-                             <span class="text-4xl font-bold text-gray-600 uppercase tracking-widest">{% if calendar.is_rest_today %}{% if config.LANGUAGE == 'EN' %}Next Work{% else %}下个工作{% endif %}{% else %}{% if config.LANGUAGE == 'EN' %}Next Off{% else %}下个休息{% endif %}{% endif %}</span>
-                             <span class="text-4xl font-bold text-gray-500">{% if config.LANGUAGE == 'EN' %}In {{ calendar.next_day.days_away }} days{% else %}{{ calendar.next_day.days_away }}天后{% endif %}</span>
-                         </div>
-                         <div class="text-6xl font-black leading-none">{{ calendar.next_day.date }}</div>
-                         <div class="text-4xl font-bold mt-2 truncate max-w-[24rem] ml-auto">{{ calendar.next_day.name }}</div>
+                        <div class="flex items-baseline justify-end gap-4 mb-2">
+                            <span class="text-4xl font-bold text-gray-600 uppercase tracking-widest">{% if calendar.is_rest_today %}{% if config.LANGUAGE == 'EN' %}Next Work{% else %}下个工作{% endif %}{% else %}{% if config.LANGUAGE == 'EN' %}Next Off{% else %}下个休息{% endif %}{% endif %}</span>
+                            <span class="text-4xl font-bold text-gray-500">{% if config.LANGUAGE == 'EN' %}In {{ calendar.next_day.days_away }} days{% else %}{{ calendar.next_day.days_away }}天后{% endif %}</span>
+                        </div>
+                        <div class="text-6xl font-black leading-none">{{ calendar.next_day.date }}</div>
+                        <div class="text-4xl font-bold mt-2 truncate max-w-[24rem] ml-auto">{{ calendar.next_day.name }}</div>
                     </div>
                     {% endif %}
                 </div>
@@ -84,8 +70,9 @@
                 <!-- Divider -->
                 <div class="h-[4px] bg-black w-full mt-6"></div>
 
-                <!-- Bottom: Reserved for local time (rendered by Kindle) -->
+                <!-- Bottom: Reserved for local time (rendered by Kindle or placeholder) -->
                 <div id="local-time-placeholder" class="flex-grow flex items-center justify-center">
+                    <span class="text-5xl font-black text-gray-400 tracking-wider">KINDLE DASHBOARD</span>
                 </div>
             </div>
 
@@ -95,9 +82,9 @@
                 <div class="flex flex-col flex-grow justify-start pt-2">
                     <!-- Header Row: City + Environmental Indicators -->
                     <div class="flex justify-between items-start mb-4">
-                        <!-- Left: City Name (smaller) -->
+                        <!-- Left: City Name (Auto-resolved via IP) -->
                         <div>
-                             <span class="text-4xl font-bold text-gray-700 block">{{ weather.location.name }}</span>
+                            <span class="text-4xl font-bold text-gray-700 block">{{ weather.location.name }}</span>
                         </div>
                         
                         <!-- Right: Environmental Indicators Row -->
@@ -129,26 +116,22 @@
                     <div class="flex items-start justify-between px-2 mt-4">
                         <!-- Left: Icon + Weather Name (Same Line) and Alerts Below -->
                         <div class="flex flex-col">
-                            <!-- Icon and Weather Name in Same Row -->
                             <div class="flex items-center">
                                 <img src="http://openweathermap.org/img/wn/{{ weather.current.icon }}@4x.png" class="w-[160px] h-[160px] grayscale invert contrast-125 drop-shadow-sm -ml-6 -my-4">
                                 <span class="text-6xl font-black ml-2">{{ weather.current.desc }}</span>
                             </div>
                             
-                            <!-- Future Weather Alerts (48h) -->
+                            <!-- Future Weather Alerts -->
                             <div class="mt-6 ml-8">
                                 {% if weather.current.has_warning %}
-                                <!-- Government Warning: Black background -->
                                 <div class="inline-block text-3xl font-black bg-black text-white px-4 py-2">
                                     ⚠ {{ weather.current.alert }}
                                 </div>
                                 {% elif weather.current.alert %}
-                                <!-- Rain/Snow forecast -->
                                 <div class="inline-block text-3xl font-bold text-gray-500 px-1 py-1">
                                     {{ weather.current.alert }}
                                 </div>
                                 {% else %}
-                                <!-- No rain/snow: Gray text -->
                                 <div class="inline-block text-3xl font-bold text-gray-500 px-1 py-1">
                                     {% if config.LANGUAGE == 'EN' %}No rain/snow recently{% else %}近期无雨雪{% endif %}
                                 </div>
@@ -156,7 +139,7 @@
                             </div>
                         </div>
                         
-                        <!-- Right: Temperature and High/Low (Aligned) -->
+                        <!-- Right: Temperature and High/Low -->
                         <div class="text-right flex flex-col items-end justify-center tabular-nums">
                             <div class="text-[9rem] font-black leading-[0.85] tracking-tighter">{{ weather.current.temp }}°</div>
                             <div class="text-4xl font-bold text-gray-500 mt-8 mr-12 tracking-tight">{{ weather.current.high_low }}</div>
@@ -164,11 +147,8 @@
                     </div>
                 </div>
 
-
                 <!-- Bottom Part: Hourly Forecast + Tomorrow -->
-                <!-- Increased height from 160px to 220px/auto to breathe, but ensured content fits -->
                 <div class="grid grid-cols-4 h-[220px] pb-2 items-end">
-                    <!-- 3 Hourly Slots -->
                     {% for item in weather.forecast %}
                     <div class="flex flex-col items-center justify-end h-full border-r-2 border-gray-200 relative px-2 py-1">
                         <span class="text-3xl font-bold mb-1">{{ item.label }}</span>
@@ -180,118 +160,95 @@
                     
                     <!-- Tomorrow -->
                     <div class="flex flex-col items-center justify-end h-full px-2 py-1">
-                         <span class="text-3xl font-bold mb-1">{{ weather.tomorrow.label }}</span>
-                         <img src="http://openweathermap.org/img/wn/{{ weather.tomorrow.icon }}@2x.png" class="w-[70px] h-[70px] grayscale invert contrast-125 mb-0">
-                         <!-- High/Low -->
-                         <span class="text-5xl font-black mt-0 leading-none">{{ weather.tomorrow.temp }}</span>
-                         <span class="text-3xl font-bold text-gray-500 mt-1 truncate w-full text-center">{{ weather.tomorrow.desc }}</span>
+                        <span class="text-3xl font-bold mb-1">{{ weather.tomorrow.label }}</span>
+                        <img src="http://openweathermap.org/img/wn/{{ weather.tomorrow.icon }}@2x.png" class="w-[70px] h-[70px] grayscale invert contrast-125 mb-0">
+                        <span class="text-5xl font-black mt-0 leading-none">{{ weather.tomorrow.temp }}</span>
+                        <span class="text-3xl font-bold text-gray-500 mt-1 truncate w-full text-center">{{ weather.tomorrow.desc }}</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- BOTTOM HALF (50%) -->
-        <div class="flex flex-1 gap-[4px] min-h-0">
-
-            <!-- Left: News (65%) -->
-            <div class="panel w-[65%] flex flex-col p-8 pr-10">
-                <!-- Distribute vertically -->
-                <div class="flex flex-col flex-grow justify-around py-1">
-                    {% for story in news[:5] %}
-                    {% if story.is_external %}
-                    <!-- External News: No index, no divider, meta on right -->
-                    <div class="flex items-center justify-between group py-3 h-[88px]">
-                        <div class="flex items-center flex-1 min-w-0 mr-4">
-                            <!-- Title only (no numbered index) -->
-                            <span class="hn-story-title text-5xl font-bold text-black leading-tight line-clamp-2 break-words whitespace-normal">
-                                {{ story.title }}
+        <!-- BOTTOM HALF (50%): TODO LIST (待办事项系统) -->
+        <div class="flex flex-1 min-h-0">
+            <div class="panel w-full flex flex-col p-8 justify-between">
+                
+                <!-- Header of Todo Panel -->
+                <div class="flex items-center justify-between pb-4 border-b-4 border-black">
+                    <div class="flex items-center gap-6">
+                        <div class="text-5xl font-black tracking-tight flex items-center gap-3">
+                            <span>待办事项</span>
+                            <span class="text-3xl font-normal text-gray-400">/ TODO LIST</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl font-bold bg-black text-white px-3 py-1">
+                                {{ todo_stats.pending }} 待完成
+                            </span>
+                            <span class="text-2xl font-bold border-2 border-black text-black px-3 py-1">
+                                {{ todo_stats.completed }} 已完成
                             </span>
                         </div>
-                        <!-- Meta info (small gray text on right) -->
-                        <span class="text-3xl font-bold text-gray-500 shrink-0 min-w-[3rem] text-right">
-                             {{ story.meta }}
+                    </div>
+                    <div class="text-right">
+                        <span class="text-2xl font-bold text-gray-500 tracking-wide">
+                            在手机/电脑访问 <span class="text-black font-black">/todos</span> 管理
                         </span>
                     </div>
+                </div>
+
+                <!-- Todo Items Grid (双列自适应排版) -->
+                <div class="flex-grow py-6 flex flex-col justify-start">
+                    {% if todos|length == 0 %}
+                    <!-- Empty State -->
+                    <div class="h-full flex flex-col items-center justify-center text-center py-16">
+                        <div class="text-7xl font-black mb-4">🎉</div>
+                        <div class="text-5xl font-black mb-3">当前没有待办事项</div>
+                        <div class="text-3xl font-bold text-gray-500">在电脑或手机浏览器打开 /todos 随时添加任务</div>
+                    </div>
                     {% else %}
-                    <!-- Hacker News: Rank + Title + Score with dividers -->
-                    <div class="flex items-center justify-between group py-3 border-b-2 border-gray-100 last:border-0 h-[88px]"> <!-- Fixed height constraint or consistent padding -->
-                        <div class="flex items-center flex-1 min-w-0 mr-4">
-                            <!-- Rank -->
-                            <span class="text-5xl font-black mr-4 min-w-[3rem] text-right text-gray-300 group-hover:text-black leading-none shrink-0">{{ loop.index }}.</span>
-                            
-                            <!-- Title (Dynamic font size: 5xl default, 4xl if wrapped) -->
-                            <span class="hn-story-title text-5xl font-bold text-black leading-tight line-clamp-2 break-words whitespace-normal">
-                                {{ story.title }}
+                    <!-- Sorted: Pending items first, completed items last -->
+                    {% set sorted_todos = todos | sort(attribute='completed') %}
+                    <div class="grid grid-cols-2 gap-x-12 gap-y-5 content-start">
+                        {% for item in sorted_todos[:10] %}
+                        <div class="flex items-center h-[72px] px-4 py-2 border-2 {% if item.completed %}border-gray-200 bg-gray-50{% else %}border-black bg-white{% endif %}">
+                            <!-- Checkbox icon -->
+                            {% if item.completed %}
+                            <div class="w-9 h-9 flex-shrink-0 bg-black text-white flex items-center justify-center mr-4 text-2xl font-black">
+                                ✓
+                            </div>
+                            <span class="text-4xl font-bold text-gray-400 line-through truncate flex-1">
+                                {{ item.text }}
                             </span>
+                            {% else %}
+                            <div class="w-9 h-9 flex-shrink-0 border-4 border-black mr-4"></div>
+                            <span class="text-4xl font-black text-black truncate flex-1">
+                                {{ item.text }}
+                            </span>
+                            {% endif %}
                         </div>
-                        <!-- Score (Small gray number, Black if breaking) -->
-                        <span class="text-3xl font-bold {% if story.is_breaking %}text-black{% else %}text-gray-500{% endif %} shrink-0 min-w-[3rem] text-right">
-                             {{ story.score }}
+                        {% endfor %}
+                    </div>
+                    
+                    {% if todos|length > 10 %}
+                    <div class="mt-4 text-right">
+                        <span class="text-2xl font-bold text-gray-500">
+                            ... 还有 {{ todos|length - 10 }} 项未在看板展示，可在 /todos 中查看
                         </span>
                     </div>
                     {% endif %}
-                    {% endfor %}
+                    {% endif %}
                 </div>
-            </div>
 
-            <!-- Right: Financials (Remaining 35%) -->
-            <div class="bg-black flex-1 flex flex-col gap-[4px]">
-                {% for item in finance %}
-                <div class="panel flex-1 flex flex-col justify-center px-6 py-2">
-                    <!-- Row 1: Name + Price -->
-                    <div class="flex justify-between items-end mb-2">
-                        <span class="text-4xl font-black leading-none">{{ item.name }}</span>
-                        <span class="text-6xl font-black leading-none tracking-tighter">{{ item.price }}</span>
-                    </div>
-                    
-                    <!-- Row 2: Sparkline + Change -->
-                    <!-- Compressed height to prevent cutoff -->
-                    <div class="flex items-end justify-between h-[120px]">
-                         <!-- Sparkline -->
-                        <div class="flex-grow h-full mr-4 relative">
-                            {% if item.chart %}
-                            <img src="data:image/png;base64,{{ item.chart }}" class="w-full h-full grayscale contrast-200" style="object-fit: fill;">
-                            <!-- Baseline -->
-                            <div class="absolute bottom-0 left-0 right-0 border-b-2 border-gray-300"></div>
-                            {% else %}
-                            <div class="w-full h-full bg-gray-100 flex items-center justify-center text-xl font-bold">N/A</div>
-                            {% endif %}
-                        </div>
-
-                       <!-- Change Badge -->
-                        <div class="shrink-0 mb-2">
-                            {% if item.change >= 0 %}
-                            <span class="text-4xl font-bold bg-black text-white px-3 py-2 block min-w-[150px] text-center">▲ {{ "%.2f"|format(item.change) }}%</span>
-                            {% else %}
-                            <span class="text-4xl font-bold border-b-4 border-black text-black px-1 block min-w-[150px] text-center">▼ {{ "%.2f"|format(item.change) }}%</span>
-                            {% endif %}
-                        </div>
-                    </div>
+                <!-- Footer tip -->
+                <div class="pt-3 border-t-2 border-gray-200 flex justify-between items-center text-2xl font-bold text-gray-400">
+                    <span>E-INK OPTIMIZED HIGH CONTRAST DISPLAY</span>
+                    <span>看板最后更新于: {{ updated_at }}</span>
                 </div>
-                {% endfor %}
-            </div>
 
+            </div>
         </div>
 
     </div>
 
-    <script>
-        // Dynamic Font Sizing for HN Titles
-        window.addEventListener('load', () => {
-            const titles = document.querySelectorAll('.hn-story-title');
-            titles.forEach(title => {
-                // Check if the title text wraps to more than one line
-                // We compare scrollHeight to the calculated line-height
-                const style = window.getComputedStyle(title);
-                const lineHeight = parseFloat(style.lineHeight);
-                // Buffer of 10% to account for sub-pixel rendering differences
-                if (title.scrollHeight > lineHeight * 1.1) {
-                    title.classList.remove('text-5xl');
-                    title.classList.add('text-4xl');
-                }
-            });
-        });
-    </script>
 </body>
 </html>
-

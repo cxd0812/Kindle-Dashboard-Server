@@ -1,25 +1,34 @@
-from flask import Flask, render_template, send_file
+from flask import Flask, render_template, send_file, request, jsonify, redirect, url_for
 import datetime
 from zoneinfo import ZoneInfo
 import time
 import io
 import hashlib
+import os
+import signal
 from concurrent.futures import ThreadPoolExecutor
-# Import from our new data layer
-from data_services import get_weather, get_calendar_info, get_hacker_news, generate_sparkline
-from config import Config
 
-executor = ThreadPoolExecutor(max_workers=20)
+from data_services import get_weather, get_calendar_info, get_ip_location
+from config import Config
+import todo_service
+
+executor = ThreadPoolExecutor(max_workers=10)
 
 app = Flask(__name__)
 
 # Simple in-memory cache for the /render endpoint
 # Format: {"data": bytes, "timestamp": float}
 _render_cache = {"data": None, "timestamp": 0}
+_consecutive_render_failures = 0
+MAX_RENDER_FAILURES = 5
+
+def _clear_render_cache():
+    global _render_cache
+    _render_cache["data"] = None
+    _render_cache["timestamp"] = 0
 
 @app.route('/health')
 def health():
-    print("Health check hit")
     return "OK"
 
 @app.route('/dashboard')
@@ -27,71 +36,111 @@ def dashboard():
     # Submit Data Fetch Tasks in Parallel
     future_weather = executor.submit(get_weather)
     future_calendar = executor.submit(get_calendar_info)
-    future_news = executor.submit(get_hacker_news)
-
-    # Finance Tasks
-    tickers = Config.get_finance_tickers()
-    future_finance = [(t, executor.submit(generate_sparkline, t['symbol'])) for t in tickers]
 
     # Gather Results
     try:
-        weather = future_weather.result(timeout=15)
+        weather = future_weather.result(timeout=10)
     except Exception as e:
         print(f"Weather Timeout: {e}")
         weather = {"current": {"temp": "--"}, "forecast": [], "tomorrow": {}}
 
     try:
         calendar = future_calendar.result(timeout=5)
-    except:
+    except Exception as e:
+        print(f"Calendar Timeout: {e}")
         calendar = {"date_str": "--", "weekday": "--", "lunar": "--"}
 
+    todos = todo_service.get_todos()
+    stats = todo_service.get_stats()
+    loc = get_ip_location()
+    tz = loc.get("timezone") or Config.TIMEZONE
+
     try:
-        news = future_news.result(timeout=15)
-    except:
-        news = []
+        updated_at = datetime.datetime.now(ZoneInfo(tz)).strftime("%H:%M")
+    except Exception:
+        updated_at = datetime.datetime.now().strftime("%H:%M")
 
-    finance_data = []
-    for t, future in future_finance:
-        try:
-            chart, price, change = future.result(timeout=15)
-        except:
-             chart, price, change = None, "--", 0
-             
-        # Formatting Price (by magnitude: forex / ETF / index & crypto)
-        if price == "--":
-            p_str = "--"
-        else:
-            try:
-                if price >= 1000:
-                    p_str = f"{price:,.0f}"      # indices & crypto: 25,890 / 65,684
-                elif price >= 100:
-                    p_str = f"{price:,.2f}"      # ETFs: 190.34 / 721.32
-                else:
-                    p_str = f"{price:.4f}"       # forex: 5.3210 / 6.7562
-            except:
-                p_str = str(price)
+    return render_template(
+        'dashboard.html', 
+        weather=weather, 
+        calendar=calendar, 
+        todos=todos,
+        todo_stats=stats,
+        updated_at=updated_at,
+        config=Config
+    )
 
-        finance_data.append({
-            "name": t['name'],
-            "price": p_str,
-            "change": change,
-            "chart": chart
+# --- Todo Management Web Page & APIs ---
+
+@app.route('/todos')
+@app.route('/tasks')
+@app.route('/todo')
+def todos_page():
+    todos = todo_service.get_todos()
+    stats = todo_service.get_stats()
+    return render_template('todos.html', todos=todos, stats=stats)
+
+@app.route('/api/todos', methods=['GET'])
+def api_get_todos():
+    return jsonify({
+        "success": True,
+        "todos": todo_service.get_todos(),
+        "stats": todo_service.get_stats()
+    })
+
+@app.route('/api/todos', methods=['POST'])
+def api_add_todo():
+    data = request.get_json(silent=True) or request.form
+    text = data.get('text', '')
+    priority = data.get('priority', 'normal')
+    new_item = todo_service.add_todo(text, priority)
+    if new_item:
+        _clear_render_cache()
+        return jsonify({
+            "success": True, 
+            "todo": new_item, 
+            "stats": todo_service.get_stats()
         })
-    
-    return render_template('dashboard.html', 
-                           weather=weather, 
-                           finance=finance_data, 
-                           calendar=calendar, 
-                           news=news,
-                           updated_at=datetime.datetime.now(ZoneInfo(Config.TIMEZONE)).strftime("%H:%M"),
-                           config=Config)
+    return jsonify({"success": False, "error": "待办内容不能为空"}), 400
 
-import os
-import signal
+@app.route('/api/todos/<todo_id>/toggle', methods=['POST', 'PUT'])
+def api_toggle_todo(todo_id):
+    item = todo_service.toggle_todo(todo_id)
+    if item:
+        _clear_render_cache()
+        return jsonify({
+            "success": True, 
+            "todo": item, 
+            "stats": todo_service.get_stats()
+        })
+    return jsonify({"success": False, "error": "待办事项不存在"}), 404
 
-# Global counter for consecutive rendering errors
-_consecutive_render_failures = 0
-MAX_RENDER_FAILURES = 5
+@app.route('/api/todos/<todo_id>', methods=['DELETE', 'POST'])
+def api_delete_todo(todo_id):
+    ok = todo_service.delete_todo(todo_id)
+    if ok:
+        _clear_render_cache()
+        return jsonify({
+            "success": True, 
+            "stats": todo_service.get_stats()
+        })
+    return jsonify({"success": False, "error": "待办事项不存在"}), 404
+
+@app.route('/api/todos/clear-completed', methods=['POST'])
+def api_clear_completed():
+    todo_service.clear_completed()
+    _clear_render_cache()
+    return jsonify({
+        "success": True, 
+        "stats": todo_service.get_stats()
+    })
+
+@app.route('/api/cache/clear', methods=['POST', 'GET'])
+def api_clear_cache():
+    _clear_render_cache()
+    return jsonify({"success": True, "message": "Render cache cleared"})
+
+# --- E-ink Render Endpoint ---
 
 @app.route('/render')
 @app.route('/render.png')
@@ -102,7 +151,6 @@ def render_dashboard():
     current_time = time.time()
     
     def prepare_response(data, timestamp):
-        # Reset failure counter on success
         global _consecutive_render_failures
         _consecutive_render_failures = 0
         
@@ -112,18 +160,13 @@ def render_dashboard():
             as_attachment=False, 
             download_name='dashboard.png'
         )
-        # Cloudflare loves extensions and explicit CDN cache headers
-        # s-maxage is for shared caches (like CF)
         response.headers['Cache-Control'] = f'public, max-age={Config.CACHE_TTL_RENDER}, s-maxage={Config.CACHE_TTL_RENDER}'
         
-        # Last-Modified helps CF with validation
         last_modified = datetime.datetime.fromtimestamp(timestamp, datetime.UTC)
         response.headers['Last-Modified'] = last_modified.strftime('%a, %d %b %Y %H:%M:%S GMT')
         
-        # ETag for strong validation
         etag = hashlib.md5(data).hexdigest()
         response.set_etag(etag)
-        
         return response
 
     # 1. Check if we have a valid cache
@@ -137,7 +180,6 @@ def render_dashboard():
     
     try:
         image_io = render_dashboard_to_bytes(dashboard_url)
-        # Read the io.BytesIO content to store it in cache
         image_bytes = image_io.getvalue()
         
         # Update Cache
@@ -154,8 +196,6 @@ def render_dashboard():
         
         if _consecutive_render_failures >= MAX_RENDER_FAILURES:
              print("CRITICAL: Too many consecutive rendering errors. Restarting container...")
-             # Send SIGTERM to PID 1 to trigger container restart
-             # Note: This works if the container is running as root (default)
              try:
                  os.kill(1, signal.SIGTERM)
              except PermissionError:
