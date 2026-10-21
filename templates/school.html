@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>学习看板设置</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f5f6f4; color: #202321; font-family: "Microsoft YaHei", "Noto Sans SC", sans-serif; }
+    header { background: white; border-bottom: 1px solid #d8dbd8; padding: 16px max(24px, calc((100% - 1120px)/2)); display: flex; align-items: center; justify-content: space-between; }
+    h1 { font-size: 20px; margin: 0; } a { color: #245d4b; font-weight: 700; text-decoration: none; }
+    main { max-width: 1120px; margin: 22px auto; padding: 0 20px 40px; }
+    .date-line { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; } .date-line h2 { font-size: 18px; margin: 0; } .muted { color: #6c746f; font-size: 13px; }
+    section { background: white; border-top: 1px solid #d8dbd8; border-bottom: 1px solid #d8dbd8; padding: 18px 0; margin-bottom: 20px; }
+    h3 { font-size: 16px; margin: 0 0 14px; }
+    .grid { display: grid; grid-template-columns: repeat(7,minmax(116px,1fr)); gap: 8px; overflow-x: auto; }
+    .day { min-width: 116px; border: 1px solid #d8dbd8; background: #fafbf9; }
+    .day-name { padding: 9px; background: #edf1ee; font-size: 13px; font-weight: 800; }
+    .slot { padding: 8px; border-top: 1px solid #e4e7e4; } .slot label { display: block; color: #737b76; font-size: 11px; margin-bottom: 4px; }
+    input, textarea { width: 100%; border: 1px solid #c9cfca; background: white; padding: 8px; font: inherit; color: #202321; border-radius: 3px; }
+    textarea { min-height: 132px; resize: vertical; line-height: 1.55; }
+    .two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .note { margin: 10px 0 0; color: #707872; font-size: 12px; line-height: 1.6; }
+    .actions { display: flex; align-items: center; gap: 14px; } button { border: 0; padding: 11px 22px; border-radius: 3px; background: #245d4b; color: white; font-weight: 800; font-size: 14px; cursor: pointer; } #status { color: #245d4b; font-size: 13px; }
+    @media(max-width:760px) { .two { grid-template-columns: 1fr; } main { margin-top: 16px; } }
+  </style>
+</head>
+<body>
+  <header><h1>学习看板设置</h1><a href="/dashboard">查看看板 →</a></header>
+  <main>
+    <div class="date-line"><h2>明日安排</h2><span class="muted">{{ settings.target_date }} · {{ settings.weekday }}（放学后更新这里，第二天看板自动显示）</span></div>
+    <form id="school-form">
+      <section><h3>每周课程表</h3><div class="grid">
+        {% for day in range(1,8) %}<div class="day"><div class="day-name">{{ weekdays[day-1] }}</div>
+          {% for period in range(7) %}<div class="slot"><label>{% if period < 4 %}上午{% else %}下午{% endif %} · 第{{ period+1 }}节</label><input name="schedule-{{ day }}-{{ period }}" value="{{ settings.schedule[day|string][period] }}" maxlength="40"></div>{% endfor %}
+        </div>{% endfor %}
+      </div><p class="note">填写每周固定课程；留空表示该节没有课程。周四有社团课时填“社团课”，看板会自动提醒带尤克里里。</p></section>
+      <section><div class="two"><div><h3>明天的作业</h3><textarea name="homework" placeholder="每项作业一行，例如:&#10;读课文第6课两遍&#10;完成数学练习册第12页">{{ settings.homework }}</textarea><p class="note">保存后自动生成拼音并显示在作业文字上方。</p></div>
+        <div><h3>额外要带的东西</h3><textarea name="extras" placeholder="每项一行，例如:&#10;水壶&#10;红领巾">{{ settings.extras }}</textarea><p class="note">语文、数学课程自动加入课本和作业；美术课自动加入美术工具。</p></div></div></section>
+      <div class="actions"><button type="submit">保存明日安排</button><span id="status" role="status"></span></div>
+    </form>
+  </main>
+  <script>
+    const form = document.getElementById('school-form');
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const payload = { schedule: {}, homework: form.elements.homework.value, extras: form.elements.extras.value };
+      for (let day = 1; day <= 7; day++) {
+        payload.schedule[String(day)] = [];
+        for (let period = 0; period < 7; period++) payload.schedule[String(day)].push(form.elements[`schedule-${day}-${period}`].value);
+      }
+      const status = document.getElementById('status');
+      status.textContent = '正在保存…';
+      try {
+        const response = await fetch('/api/school', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+        const result = await response.json();
+        if (!response.ok || !result.success) throw new Error(result.error || '保存失败');
+        status.textContent = '已保存';
+      } catch (error) { status.textContent = error.message; }
+    });
+  </script>
+</body>
+</html>
