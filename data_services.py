@@ -327,6 +327,21 @@ def get_weather(lat=None, lon=None):
 
         # 3. Tomorrow Forecast
         daily = resp.get("daily", {})
+
+        daily_forecast = []
+        daily_dates = daily.get("time", [])
+        daily_codes = daily.get("weather_code", [])
+        daily_max = daily.get("temperature_2m_max", [])
+        daily_min = daily.get("temperature_2m_min", [])
+        for i in range(min(3, len(daily_dates), len(daily_codes), len(daily_max), len(daily_min))):
+            day_desc, _ = map_wmo_to_text(daily_codes[i])
+            daily_forecast.append({
+                "date": daily_dates[i],
+                "desc": day_desc,
+                "high": round(daily_max[i]),
+                "low": round(daily_min[i]),
+            })
+        weather_data["daily"] = daily_forecast
         
         if len(daily.get("time", [])) >= 1:
             t0_max = round(daily['temperature_2m_max'][0])

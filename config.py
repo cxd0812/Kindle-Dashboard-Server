@@ -20,8 +20,8 @@ class Config:
     TIMEZONE = os.environ.get("TIMEZONE", "Asia/Shanghai")
 
     # --- Screen Configuration ---
-    SCREEN_WIDTH = int(os.environ.get("SCREEN_WIDTH", 1680))
-    SCREEN_HEIGHT = int(os.environ.get("SCREEN_HEIGHT", 1264))
+    SCREEN_WIDTH = int(os.environ.get("SCREEN_WIDTH", 800))
+    SCREEN_HEIGHT = int(os.environ.get("SCREEN_HEIGHT", 600))
     
     # --- Renderer Configuration ---
     RENDER_TIMEOUT = int(os.environ.get("RENDER_TIMEOUT", 60000))

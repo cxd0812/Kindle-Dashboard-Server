@@ -8,9 +8,11 @@ import os
 import signal
 from concurrent.futures import ThreadPoolExecutor
 
-from data_services import get_weather, get_calendar_info, get_ip_location
+from data_services import get_weather
 from config import Config
 import todo_service
+import learning_service
+from lunardate import LunarDate
 
 executor = ThreadPoolExecutor(max_workers=10)
 
@@ -35,9 +37,6 @@ def health():
 def dashboard():
     # Submit Data Fetch Tasks in Parallel
     future_weather = executor.submit(get_weather)
-    future_calendar = executor.submit(get_calendar_info)
-
-    # Gather Results
     try:
         weather = future_weather.result(timeout=10)
     except Exception as e:
@@ -45,30 +44,53 @@ def dashboard():
         weather = {"current": {"temp": "--"}, "forecast": [], "tomorrow": {}}
 
     try:
-        calendar = future_calendar.result(timeout=5)
-    except Exception as e:
-        print(f"Calendar Timeout: {e}")
-        calendar = {"date_str": "--", "weekday": "--", "lunar": "--"}
-
-    todos = todo_service.get_todos()
-    stats = todo_service.get_stats()
-    loc = get_ip_location()
-    tz = loc.get("timezone") or Config.TIMEZONE
-
-    try:
-        updated_at = datetime.datetime.now(ZoneInfo(tz)).strftime("%H:%M")
+        now = datetime.datetime.now(ZoneInfo(Config.TIMEZONE))
     except Exception:
-        updated_at = datetime.datetime.now().strftime("%H:%M")
+        now = datetime.datetime.now()
+
+    tomorrow_date = now.date() + datetime.timedelta(days=1)
+    lunar = LunarDate.fromSolarDate(now.year, now.month, now.day)
+    weekday_cn = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
+    day_labels = []
+    daily_weather = weather.get("daily", [])
+    for offset in range(3):
+        forecast_date = now.date() + datetime.timedelta(days=offset)
+        forecast = daily_weather[offset] if offset < len(daily_weather) else {}
+        day_labels.append({
+            "label": ["今天", "明天", "后天"][offset],
+            "date": forecast_date,
+            "weather": forecast.get("desc", "天气暂无"),
+            "range": f"{forecast.get('low', '--')}°–{forecast.get('high', '--')}°",
+        })
+    school = learning_service.get_plan(tomorrow_date)
 
     return render_template(
-        'dashboard.html', 
+        'learning_dashboard.html',
         weather=weather, 
-        calendar=calendar, 
-        todos=todos,
-        todo_stats=stats,
-        updated_at=updated_at,
+        today=now,
+        lunar=f"农历{lunar.month}月{lunar.day}日",
+        weekday=weekday_cn[now.weekday()],
+        tomorrow_weather=day_labels,
+        school=school,
+        updated_at=now.strftime("%H:%M"),
         config=Config
     )
+
+@app.route('/school')
+def school_page():
+    settings = learning_service.get_settings()
+    return render_template('school.html', settings=settings, weekdays=learning_service.WEEKDAYS)
+
+@app.route('/api/school', methods=['GET'])
+def api_get_school():
+    return jsonify({"success": True, **learning_service.get_settings()})
+
+@app.route('/api/school', methods=['POST'])
+def api_save_school():
+    payload = request.get_json(silent=True) or request.form
+    settings = learning_service.save_settings(payload)
+    _clear_render_cache()
+    return jsonify({"success": True, **settings})
 
 # --- Todo Management Web Page & APIs ---
 

@@ -13,8 +13,8 @@ def capture_dashboard(url):
         bytes: The screenshot image data in PNG format.
     """
     # Define the design resolution that matches the CSS/HTML layout
-    DESIGN_WIDTH = 1680
-    DESIGN_HEIGHT = 1264
+    DESIGN_WIDTH = 800
+    DESIGN_HEIGHT = 600
 
     # Calculate scale factor based on target screen width versus design width
     # We want 2x SSAA (Super Sampling Anti-Aliasing).
