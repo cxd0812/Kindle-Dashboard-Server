@@ -76,7 +76,24 @@ def homework_items(value):
             reading = " ".join(syllable[0] for syllable in pinyin(pinyin_text, style=Style.TONE, errors="ignore"))
             text = line
         if text:
-            items.append({"pinyin": reading, "text": text})
+            # Keep each reading above its own character, including numeric groups.
+            chunks = re.findall(r"\d+|[^\d]", text)
+            expanded = [_number_to_chinese(chunk) if chunk.isdigit() else chunk for chunk in chunks]
+            syllables = [part[0] for part in pinyin("".join(expanded), style=Style.TONE, errors=lambda chars: list(chars))]
+            ruby = []
+            offset = 0
+            for chunk, spoken in zip(chunks, expanded):
+                ruby.append({"text": chunk, "reading": " ".join(syllables[offset:offset + len(spoken)]).strip() if any(c.isalnum() for c in chunk) else ""})
+                offset += len(spoken)
+            if "|" in line:
+                manual = reading.split()
+                readable = [part for part in ruby if part["reading"]]
+                if len(manual) == len(readable):
+                    for part, syllable in zip(readable, manual):
+                        part["reading"] = syllable
+                else:
+                    ruby = []  # Preserve custom readings that cannot be aligned safely.
+            items.append({"pinyin": reading, "text": text, "ruby": ruby})
     return items
 
 

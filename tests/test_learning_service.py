@@ -38,6 +38,14 @@ class LearningServiceTests(unittest.TestCase):
         plan = learning_service.get_plan(target, self.data_file)
         self.assertIn("美术工具", plan["carry"])
 
+    def test_readings_align_with_characters_and_numeric_groups(self):
+        item = learning_service.homework_items("朗读第12页，读两遍")[0]
+        self.assertEqual("".join(unit["text"] for unit in item["ruby"]), item["text"])
+        self.assertEqual(next(unit["reading"] for unit in item["ruby"] if unit["text"] == "12"), "shí èr")
+        self.assertEqual(next(unit["reading"] for unit in item["ruby"] if unit["text"] == "，"), "")
+        manual = learning_service.homework_items("dú shū|读书")[0]
+        self.assertEqual([unit["reading"] for unit in manual["ruby"]], ["dú", "shū"])
+
 
 if __name__ == "__main__":
     unittest.main()
