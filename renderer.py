@@ -36,6 +36,7 @@ def capture_dashboard(url):
         
         try:
             page.goto(url, wait_until="networkidle", timeout=Config.RENDER_TIMEOUT)
+            page.evaluate("() => window.layoutReady || document.fonts.ready")
             # Extra wait to ensure all JS rendering (charts, etc) is done if networkidle isn't enough
             # page.wait_for_timeout(2000) 
             

@@ -27,7 +27,7 @@ class LearningServiceTests(unittest.TestCase):
 
         self.assertEqual(plan["weekday"], "星期四")
         self.assertIn("尤克里里", plan["carry"])
-        self.assertEqual(plan["carry"][:4], ["数学课本", "数学作业", "语文课本", "语文作业"])
+        self.assertEqual(plan["carry"][:4], ["带数学课本", "带数学作业", "带语文课本", "带语文作业"])
         self.assertEqual(plan["carry"][-2:], ["水壶", "红领巾"])
         self.assertEqual(plan["homework"][0]["text"], "读课文第6课两遍")
         self.assertEqual(plan["homework"][0]["pinyin"], "dú kè wén dì liù kè liǎng biàn")
@@ -71,6 +71,18 @@ class LearningServiceTests(unittest.TestCase):
         }, first, self.data_file)
         plan = learning_service.get_plan(later, self.data_file)
         self.assertEqual(plan["carry"][-2:], ["水杯", "跳绳"])
+
+    def test_papers_generate_subject_reminders_and_preserve_free_text(self):
+        target = dt.date(2026, 10, 22)
+        settings = learning_service.get_settings(target, self.data_file)
+        learning_service.save_settings({"schedule": settings["schedule"],
+            "homework": "语文：完成试卷\n订正小卷\n数学：完成卷子\n科学：完成小卷",
+            "extras": "天气冷，穿厚衣服"}, target, self.data_file)
+        carry = learning_service.get_plan(target, self.data_file)["carry"]
+        for item in ["带语文作业", "带数学作业", "带语文小卷", "带数学小卷", "带科学小卷", "天气冷，穿厚衣服"]:
+            self.assertIn(item, carry)
+        self.assertEqual(carry.count("带语文小卷"), 1)
+        self.assertEqual(learning_service.get_plan(target + dt.timedelta(days=1), self.data_file)["carry"], carry)
 
 
 if __name__ == "__main__":

@@ -12,6 +12,7 @@ from data_services import get_weather
 from config import Config
 import todo_service
 import learning_service
+from daily_quotes import daily_quote
 from lunardate import LunarDate
 
 executor = ThreadPoolExecutor(max_workers=10)
@@ -72,6 +73,7 @@ def dashboard():
         weekday=weekday_cn[now.weekday()],
         tomorrow_weather=day_labels,
         school=school,
+        daily_quote=daily_quote(now.date()),
         updated_at=now.strftime("%H:%M"),
         config=Config
     )
@@ -91,6 +93,16 @@ def api_save_school():
     settings = learning_service.save_settings(payload)
     _clear_render_cache()
     return jsonify({"success": True, **settings})
+
+
+@app.route('/api/school/preview', methods=['POST'])
+def school_preview():
+    payload = request.get_json(silent=True) or {}
+    return render_template('learning_dashboard.html', preview=True,
+        school={"homework": learning_service.homework_items(payload.get('homework', '')),
+                "carry": [], "subjects": [], "weekday": "预览"},
+        today=datetime.datetime.now(), weekday="", lunar="", updated_at="00:00",
+        tomorrow_weather=[], daily_quote="作业排版预览")
 
 # --- Todo Management Web Page & APIs ---
 

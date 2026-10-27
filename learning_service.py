@@ -157,12 +157,40 @@ def _course_carry(subjects, target):
     carry = []
     for subject in subjects:
         if subject in ("语文", "数学"):
-            carry.extend((f"{subject}课本", f"{subject}作业"))
+            carry.extend((f"带{subject}课本", f"带{subject}作业"))
         elif subject == "美术":
             carry.append("美术工具")
         elif subject == "社团课" and target.isoweekday() == 4:
             carry.append("尤克里里")
     return carry
+
+
+def _paper_reminders(homework, subjects):
+    """Use subject headings and nearby mentions to identify worksheet reminders."""
+    names = sorted(set(["语文", "数学", "英语", "科学", "道德与法治", "美术", "音乐"] +
+                       [s for s in subjects if s]), key=len, reverse=True)
+    pattern = re.compile("|".join(map(re.escape, names)))
+    context = None
+    reminders = []
+    for line in _lines(homework):
+        text = line.split("|", 1)[-1].replace("语言", "语文")
+        events = sorted([(m.start(), "subject", m.group()) for m in pattern.finditer(text)] +
+                        [(m.start(), "paper", m.group()) for m in re.finditer("小卷|试卷|卷子", text)])
+        for _, kind, value in events:
+            if kind == "subject":
+                context = value
+            elif context:
+                reminders.append(f"带{context}小卷")
+    return list(dict.fromkeys(reminders))
+
+
+def _reminders(carry, homework, subjects):
+    normalized = []
+    for item in carry:
+        if re.fullmatch(r"(?:语文|数学)(?:课本|作业)", item):
+            item = "带" + item
+        normalized.append(item)
+    return list(dict.fromkeys(normalized + _paper_reminders(homework, subjects)))
 
 
 def get_plan(target_date=None, path=None):
@@ -181,7 +209,7 @@ def get_plan(target_date=None, path=None):
     extras = _lines(plan.get("extras", []))
     carry = _lines(plan.get("carry", [])) or _last_carry(data, target) or _course_carry(subjects, target)
     carry.extend(extras)
-    carry = list(dict.fromkeys(carry))
+    carry = _reminders(carry, homework_source, subjects)
     return {
         "date": target,
         "date_label": f"{target.month}月{target.day}日",
@@ -230,7 +258,7 @@ def save_settings(payload, target_date=None, path=None):
         data["plans"][target.isoformat()] = {
             "homework": homework,
             "extras": _lines(payload.get("extras", "")),
-            "carry": list(dict.fromkeys(_course_carry(schedule[str(target.isoweekday())], target) + _lines(payload.get("extras", "")))),
+            "carry": _reminders(_course_carry(schedule[str(target.isoweekday())], target) + _lines(payload.get("extras", "")), homework, schedule[str(target.isoweekday())]),
         }
         _write(data, path)
     return get_settings(target, path)

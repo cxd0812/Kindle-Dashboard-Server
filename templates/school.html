@@ -20,6 +20,9 @@
     .two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
     .note { margin: 10px 0 0; color: #707872; font-size: 12px; line-height: 1.6; }
     .actions { display: flex; align-items: center; gap: 14px; } button { border: 0; padding: 11px 22px; border-radius: 3px; background: #245d4b; color: white; font-weight: 800; font-size: 14px; cursor: pointer; } #status { color: #245d4b; font-size: 13px; }
+    #layout-warning { color: #9b350f; font-weight: 700; white-space: pre-wrap; }
+    .preview { overflow-x: auto; }
+    #homework-preview { width: 800px; height: 600px; border: 1px solid #c9cfca; }
     @media(max-width:760px) { .two { grid-template-columns: 1fr; } main { margin-top: 16px; } }
   </style>
 </head>
@@ -34,14 +37,39 @@
         </div>{% endfor %}
       </div><p class="note">填写每周固定课程；留空表示该节没有课程。周四有社团课时填“社团课”，看板会自动提醒带尤克里里。</p></section>
       <section><div class="two"><div><h3>明天的作业</h3><textarea name="homework" placeholder="每项作业一行，例如:&#10;读课文第6课两遍&#10;完成数学练习册第12页">{{ settings.homework }}</textarea><p class="note">保存后自动生成拼音并显示在作业文字上方。</p></div>
-        <div><h3>额外要带的东西</h3><textarea name="extras" placeholder="每项一行，例如:&#10;水壶&#10;红领巾">{{ settings.extras }}</textarea><p class="note">语文、数学课程自动加入课本和作业；美术课自动加入美术工具。</p></div></div></section>
+        <div><h3>提醒</h3><textarea name="extras" placeholder="每项一行，例如:&#10;带水壶&#10;天气变冷，穿厚外套">{{ settings.extras }}</textarea><p class="note">可填写携带物品、穿衣等提醒。语文、数学自动提醒带课本和作业；作业提到“小卷、试卷、卷子”时，自动提醒带对应科目的小卷。请在作业里写明科目，如“语文：完成小卷”。</p></div></div><p class="note">每项作业一行，长内容在看板上自动换行、按内容分配高度。没有更新时继续显示上次作业。</p><p id="layout-warning" role="status"></p></section>
+      <section><h3>作业排版预览</h3><p class="note">输入后自动预览，不会保存；完整内容保留在上方输入框中。</p><div class="preview"><iframe id="homework-preview" title="800×600 作业排版预览"></iframe></div></section>
       <div class="actions"><button type="submit">保存明日安排</button><span id="status" role="status"></span></div>
     </form>
   </main>
   <script>
     const form = document.getElementById('school-form');
+    const preview = document.getElementById('homework-preview');
+    const warning = document.getElementById('layout-warning');
+    let timer, previewVersion = 0;
+    async function updatePreview() {
+      const version = ++previewVersion;
+      try {
+        const response = await fetch('/api/school/preview', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({homework:form.elements.homework.value})});
+        if (!response.ok) throw new Error('预览加载失败');
+        const html = await response.text();
+        if (version !== previewVersion) return;
+        preview.onload = async () => {
+          await preview.contentWindow.layoutReady;
+          if (version !== previewVersion) return;
+          const tooMany = form.elements.homework.value.split(/\r?\n/).filter(line => line.trim()).length > 30;
+          warning.textContent = tooMany ? '最多保存 30 项作业，请合并或删减后保存。' : preview.contentWindow.homeworkOverflow ? '作业超出 Kindle 屏幕：已自动换行并缩小字号，仍无法全部显示。请精简内容或拆分后调整；上方输入框可查看完整作业。' : '';
+        };
+        preview.srcdoc = html;
+      } catch (error) { if (version === previewVersion) warning.textContent = error.message; }
+    }
+    form.elements.homework.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(updatePreview, 350); });
+    updatePreview();
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
+      if (form.elements.homework.value.split(/\r?\n/).filter(line => line.trim()).length > 30) {
+        warning.textContent = '最多保存 30 项作业，请合并或删减后保存。'; return;
+      }
       const payload = { schedule: {}, homework: form.elements.homework.value, extras: form.elements.extras.value };
       for (let day = 1; day <= 7; day++) {
         payload.schedule[String(day)] = [];
@@ -54,6 +82,7 @@
         const result = await response.json();
         if (!response.ok || !result.success) throw new Error(result.error || '保存失败');
         status.textContent = '已保存';
+        updatePreview();
       } catch (error) { status.textContent = error.message; }
     });
   </script>

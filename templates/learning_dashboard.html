@@ -9,7 +9,8 @@
     html, body { width: 800px; height: 600px; margin: 0; overflow: hidden; }
     body { background: #fafaf7; color: #141414; font-family: "Noto Sans CJK SC", "Noto Sans SC", "Microsoft YaHei", sans-serif; padding: 20px 24px; }
     .topline { height: 30px; display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #141414; font-size: 15px; font-weight: 700; }
-    .brand { font-size: 19px; }
+    .brand { font-size: 16px; min-width: 0; flex: 1; margin-right: 12px; white-space: nowrap; }
+    .topline > span:last-child { flex-shrink: 0; }
     .hero { height: 80px; display: flex; align-items: center; gap: 28px; border-bottom: 2px solid #141414; }
     .clock { font-size: 60px; line-height: 1; font-weight: 800; font-variant-numeric: tabular-nums; }
     .weekday { font-size: 24px; font-weight: 700; transform: translateX(16px); }
@@ -21,16 +22,17 @@
     .weather-day b { font-size: 13px; }
     .weather-day span { color: #444; font-size: 12px; margin-top: 2px; }
     .content { height: 418px; display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr); gap: 18px; padding-top: 16px; }
-    .homework { min-width: 0; }
+    .homework { min-width: 0; height: 402px; overflow: hidden; }
+    .tasks { max-height: 375px; overflow: hidden; }
     .side { border-left: 1px solid #aaa; padding-left: 18px; display: flex; flex-direction: column; }
     .section-title { height: 27px; display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 800; }
     .section-title:before { content: ""; width: 5px; height: 22px; background: #141414; }
     .count { margin-left: auto; color: #555; font-size: 13px; font-weight: 700; }
-    .task { height: var(--task-height, 72px); padding: 7px 4px 4px; border-bottom: 1px solid #cfcfc9; overflow: hidden; }
-    .task-reading { font-size: 13px; color: #555; line-height: 18px; white-space: nowrap; }
+    .task { padding: 7px 4px 8px; border-bottom: 1px solid #cfcfc9; overflow-wrap: anywhere; }
+    .task-reading { font-size: 13px; color: #555; line-height: 18px; overflow-wrap: anywhere; }
     .task-text { font-size: 26px; font-weight: 800; line-height: 32px; }
     .task-ruby { display: flex; flex-wrap: wrap; align-content: flex-start; column-gap: 2px; }
-    .reading-unit { display: inline-flex; flex-direction: column; align-items: center; min-width: 26px; }
+    .reading-unit { display: inline-flex; flex-direction: column; align-items: center; min-width: 26px; max-width: 100%; }
     .reading-unit .task-reading { min-height: 18px; font-weight: 400; }
     .homework.compact .task { padding: 2px 4px; }
     .homework.compact .task-reading { font-size: 11px; line-height: 13px; }
@@ -49,7 +51,7 @@
   </style>
 </head>
 <body>
-  <header class="topline"><span class="brand">我的学习看板</span><span>{{ today.month }}月{{ today.day }}日 {{ weekday }} · {{ lunar }}</span></header>
+  <header class="topline"><span class="brand" title="《论语》">{{ daily_quote }}</span><span>{{ today.month }}月{{ today.day }}日 {{ weekday }} · {{ lunar }}</span></header>
   <div class="hero">
     <div class="clock">{{ updated_at }}</div>
     <div class="weekday">{{ weekday }}</div>
@@ -59,12 +61,12 @@
     </div>
   </div>
   <main class="content">
-    {% set visible_homework = school.homework[:10] %}
-    {% set task_height = 370 / (visible_homework|length if visible_homework|length else 1) %}
-    <section class="homework{% if school.homework|length > 5 %} compact{% endif %}" style="--task-height:{{ task_height }}px">
+    {% set visible_homework = school.homework %}
+    <section class="homework">
       <div class="section-title">老师的作业<span class="count">{{ school.homework|length }} 项</span></div>
+      <div class="tasks">
       {% for item in visible_homework %}<div class="task">{% if item.ruby %}<div class="task-ruby" aria-label="{{ item.text }}">{% for unit in item.ruby %}<span class="reading-unit"><span class="task-reading">{{ unit.reading }}</span><span class="task-text">{{ unit.text }}</span></span>{% endfor %}</div>{% else %}<div class="task-reading">{{ item.pinyin }}</div><div class="task-text">{{ item.text }}</div>{% endif %}</div>{% else %}<div class="empty">暂无作业</div>{% endfor %}
-      {% if school.homework|length > 10 %}<div class="more-tasks">另有 {{ school.homework|length - 10 }} 项，请在 /school 查看</div>{% endif %}
+      </div><div class="more-tasks" hidden>内容超出屏幕，请在网页查看完整作业</div>
     </section>
     <aside class="side">
       <div class="section-title">{{ school.weekday }}的课程</div>
@@ -72,8 +74,28 @@
       {% for subject in school.subjects[:4] %}{% if subject %}<div class="lesson"><span>第{{ loop.index }}节</span><span>{{ subject }}</span></div>{% endif %}{% endfor %}
       <div class="afternoon"><div class="period">下午</div>
       {% for subject in school.subjects[4:] %}{% if subject %}<div class="lesson"><span>第{{ loop.index + 4 }}节</span><span>{{ subject }}</span></div>{% endif %}{% endfor %}</div>
-      <div class="carry"><div class="carry-title">记得要带</div><div class="carry-text">{% for item in school.carry %}<div>{{ item }}</div>{% else %}<div>没有额外物品</div>{% endfor %}</div></div>
+      <div class="carry"><div class="carry-title">提醒</div><div class="carry-text">{% for item in school.carry %}<div>{{ item }}</div>{% else %}<div>暂无提醒</div>{% endfor %}</div></div>
     </aside>
   </main>
+<script>
+  window.layoutReady = document.fonts.ready.then(() => {
+    const section = document.querySelector('.homework');
+    const tasks = section.querySelector('.tasks');
+    const rows = [...tasks.querySelectorAll('.task')];
+    const height = () => rows.reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
+    if (height() > 375) section.classList.add('compact');
+    window.homeworkOverflow = height() > 375;
+    if (window.homeworkOverflow) {
+      tasks.style.maxHeight = '355px';
+      const bottom = tasks.getBoundingClientRect().top + 355;
+      rows.forEach(row => { if (row.getBoundingClientRect().bottom > bottom) row.style.visibility = 'hidden'; });
+      section.querySelector('.more-tasks').hidden = false;
+    }
+    const quote = document.querySelector('.brand');
+    while (quote.scrollWidth > quote.clientWidth && parseFloat(getComputedStyle(quote).fontSize) > 11) {
+      quote.style.fontSize = (parseFloat(getComputedStyle(quote).fontSize) - 1) + 'px';
+    }
+  });
+</script>
 </body>
 </html>
