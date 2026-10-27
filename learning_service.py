@@ -122,6 +122,49 @@ def tomorrow(today=None):
     return (today or dt.date.today()) + dt.timedelta(days=1)
 
 
+def _last_homework(data, target):
+    """Return the most recently entered homework when the target has no update."""
+    candidates = []
+    for date_text, plan in data.get("plans", {}).items():
+        try:
+            plan_date = dt.date.fromisoformat(date_text)
+        except (TypeError, ValueError):
+            continue
+        if plan_date <= target and _lines(plan.get("homework", [])):
+            candidates.append((plan_date, plan.get("homework", [])))
+    if not candidates:
+        return []
+    return max(candidates, key=lambda item: item[0])[1]
+
+
+def _last_carry(data, target):
+    """Return the most recently saved carry list when the target has no update."""
+    candidates = []
+    for date_text, plan in data.get("plans", {}).items():
+        try:
+            plan_date = dt.date.fromisoformat(date_text)
+        except (TypeError, ValueError):
+            continue
+        saved = _lines(plan.get("carry", []))
+        if plan_date <= target and saved:
+            candidates.append((plan_date, saved))
+    if not candidates:
+        return []
+    return max(candidates, key=lambda item: item[0])[1]
+
+
+def _course_carry(subjects, target):
+    carry = []
+    for subject in subjects:
+        if subject in ("语文", "数学"):
+            carry.extend((f"{subject}课本", f"{subject}作业"))
+        elif subject == "美术":
+            carry.append("美术工具")
+        elif subject == "社团课" and target.isoweekday() == 4:
+            carry.append("尤克里里")
+    return carry
+
+
 def get_plan(target_date=None, path=None):
     target = target_date or tomorrow()
     weekday = str(target.isoweekday())
@@ -133,16 +176,10 @@ def get_plan(target_date=None, path=None):
         subjects[6] = subjects[6] or "社团课"
 
     plan = data["plans"].get(target.isoformat(), {})
-    homework = homework_items(plan.get("homework", []))
+    homework_source = _lines(plan.get("homework", [])) or _last_homework(data, target)
+    homework = homework_items(homework_source)
     extras = _lines(plan.get("extras", []))
-    carry = []
-    for subject in subjects:
-        if subject in ("语文", "数学"):
-            carry.extend((f"{subject}课本", f"{subject}作业"))
-        elif subject == "美术":
-            carry.append("美术工具")
-        elif subject == "社团课" and target.isoweekday() == 4:
-            carry.append("尤克里里")
+    carry = _lines(plan.get("carry", [])) or _last_carry(data, target) or _course_carry(subjects, target)
     carry.extend(extras)
     carry = list(dict.fromkeys(carry))
     return {
@@ -161,6 +198,7 @@ def get_settings(target_date=None, path=None):
     with _lock:
         data = _read(path)
     plan = data["plans"].get(target.isoformat(), {})
+    homework_source = _lines(plan.get("homework", [])) or _last_homework(data, target)
     schedule = {}
     for day in range(1, 8):
         schedule[str(day)] = (list(data["schedule"].get(str(day), [""] * 7)) + [""] * 7)[:7]
@@ -168,7 +206,7 @@ def get_settings(target_date=None, path=None):
         "target_date": target.isoformat(),
         "weekday": WEEKDAYS[target.isoweekday() - 1],
         "schedule": schedule,
-        "homework": "\n".join(_lines(plan.get("homework", []))),
+        "homework": "\n".join(homework_source),
         "extras": "\n".join(_lines(plan.get("extras", []))),
     }
 
@@ -185,9 +223,14 @@ def save_settings(payload, target_date=None, path=None):
     with _lock:
         data = _read(path)
         data["schedule"] = schedule
-        data.setdefault("plans", {})[target.isoformat()] = {
-            "homework": _lines(payload.get("homework", "")),
+        existing_plan = data.setdefault("plans", {}).get(target.isoformat(), {})
+        homework = _lines(payload.get("homework", ""))
+        if not homework:
+            homework = _lines(existing_plan.get("homework", [])) or _last_homework(data, target)
+        data["plans"][target.isoformat()] = {
+            "homework": homework,
             "extras": _lines(payload.get("extras", "")),
+            "carry": list(dict.fromkeys(_course_carry(schedule[str(target.isoweekday())], target) + _lines(payload.get("extras", "")))),
         }
         _write(data, path)
     return get_settings(target, path)

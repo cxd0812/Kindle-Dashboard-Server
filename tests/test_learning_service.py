@@ -46,6 +46,32 @@ class LearningServiceTests(unittest.TestCase):
         manual = learning_service.homework_items("dú shū|读书")[0]
         self.assertEqual([unit["reading"] for unit in manual["ruby"]], ["dú", "shū"])
 
+    def test_missing_target_homework_keeps_last_entry(self):
+        first = dt.date(2026, 10, 22)
+        later = dt.date(2026, 10, 23)
+        settings = learning_service.get_settings(first, self.data_file)
+        learning_service.save_settings({
+            "schedule": settings["schedule"],
+            "homework": "完成数学作业",
+            "extras": "",
+        }, first, self.data_file)
+        later_settings = learning_service.get_settings(later, self.data_file)
+        self.assertEqual(later_settings["homework"], "完成数学作业")
+        later_plan = learning_service.get_plan(later, self.data_file)
+        self.assertEqual(later_plan["homework"][0]["text"], "完成数学作业")
+
+    def test_missing_target_carry_keeps_last_entry(self):
+        first = dt.date(2026, 10, 22)
+        later = dt.date(2026, 10, 23)
+        settings = learning_service.get_settings(first, self.data_file)
+        learning_service.save_settings({
+            "schedule": settings["schedule"],
+            "homework": "",
+            "extras": "水杯\n跳绳",
+        }, first, self.data_file)
+        plan = learning_service.get_plan(later, self.data_file)
+        self.assertEqual(plan["carry"][-2:], ["水杯", "跳绳"])
+
 
 if __name__ == "__main__":
     unittest.main()
