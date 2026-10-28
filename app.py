@@ -12,7 +12,7 @@ from data_services import get_weather
 from config import Config
 import todo_service
 import learning_service
-from daily_quotes import daily_quote
+from learning_service import daily_quote
 from lunardate import LunarDate
 
 executor = ThreadPoolExecutor(max_workers=10)

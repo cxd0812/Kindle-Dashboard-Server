@@ -12,6 +12,28 @@ from pypinyin import Style, pinyin
 _lock = threading.RLock()
 DATA_FILE = Path(Config.TODO_DATA_DIR) / "school.json"
 
+"""Short learning quotes curated from the public online Analects collection.
+
+Source: https://github.com/chinese-poetry/chinese-poetry/blob/master/论语/lunyu.json
+Converted to simplified Chinese and excerpted for children. Rotation is local,
+so a network outage cannot delay the Kindle render or change today's quote.
+"""
+QUOTES = (
+    "学而时习之，不亦说乎？",
+    "温故而知新，可以为师矣。",
+    "学而不思则罔，思而不学则殆。",
+    "知之为知之，不知为不知，是知也。",
+    "三人行，必有我师焉。",
+    "敏而好学，不耻下问。",
+    "知之者不如好之者，好之者不如乐之者。",
+    "我非生而知之者，好古，敏以求之者也。",
+)
+
+
+def daily_quote(day):
+    return QUOTES[day.toordinal() % len(QUOTES)]
+
+
 WEEKDAYS = ["星期一", "星期二", "星期三", "星期四", "星期五", "星期六", "星期日"]
 DEFAULT_SCHEDULE = {
     "1": ["数学", "语文", "美术", "道德与法治", "体育与健康", "综合实践活动", "少先队活动/心理健康"],
