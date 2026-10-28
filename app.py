@@ -64,6 +64,10 @@ def dashboard():
             "range": f"{forecast.get('low', '--')}°–{forecast.get('high', '--')}°",
         })
     school = learning_service.get_plan(tomorrow_date)
+    # 课程独立按16:00切换；保留作业、提醒原有的日期与延用规则。
+    courses = learning_service.get_plan(learning_service.course_date(now))
+    school["subjects"] = courses["subjects"]
+    school["weekday"] = courses["weekday"]
 
     return render_template(
         'learning_dashboard.html',

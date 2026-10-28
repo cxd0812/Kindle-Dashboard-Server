@@ -5,6 +5,7 @@ import re
 import tempfile
 import threading
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from config import Config
 from pypinyin import Style, pinyin
@@ -142,6 +143,20 @@ def _number_to_chinese(value):
 
 def tomorrow(today=None):
     return (today or dt.date.today()) + dt.timedelta(days=1)
+
+
+def course_date(now=None):
+    """每天16:00切换到下一上课日，周末一直显示周一课程。"""
+    if now is None:
+        now = dt.datetime.now(ZoneInfo(Config.TIMEZONE))
+    elif now.tzinfo is not None:
+        now = now.astimezone(ZoneInfo(Config.TIMEZONE))
+    target = now.date()
+    if now.hour >= 16:
+        target += dt.timedelta(days=1)
+    while target.weekday() >= 5:
+        target += dt.timedelta(days=1)
+    return target
 
 
 def _last_homework(data, target):

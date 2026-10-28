@@ -2,6 +2,8 @@ import datetime as dt
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 import learning_service
 
@@ -13,6 +15,52 @@ class LearningServiceTests(unittest.TestCase):
 
     def tearDown(self):
         self.temp_dir.cleanup()
+
+    def test_course_date_switches_at_four_and_skips_weekends(self):
+        cases = [
+            ("2026-10-27T15:59:59", "2026-10-27"),
+            ("2026-10-27T16:00:00", "2026-10-28"),
+            ("2026-10-28T00:00:00", "2026-10-28"),
+            ("2026-10-28T15:59:59", "2026-10-28"),
+            ("2026-10-28T16:00:00", "2026-10-29"),
+            ("2026-10-30T15:59:59", "2026-10-30"),
+            ("2026-10-30T16:00:00", "2026-11-02"),
+            ("2026-10-31T09:00:00", "2026-11-02"),
+            ("2026-10-31T16:00:00", "2026-11-02"),
+            ("2026-11-01T09:00:00", "2026-11-02"),
+            ("2026-11-01T16:00:00", "2026-11-02"),
+            ("2026-11-02T15:59:59", "2026-11-02"),
+            ("2026-11-02T16:00:00", "2026-11-03"),
+        ]
+        for value, expected in cases:
+            with self.subTest(now=value):
+                self.assertEqual(learning_service.course_date(dt.datetime.fromisoformat(value)),
+                                 dt.date.fromisoformat(expected))
+
+    def test_course_date_uses_configured_timezone(self):
+        with patch.object(learning_service.Config, "TIMEZONE", "Asia/Shanghai"):
+            before = dt.datetime(2026, 10, 27, 7, 59, 59, tzinfo=ZoneInfo("UTC"))
+            after = dt.datetime(2026, 10, 27, 8, tzinfo=ZoneInfo("UTC"))
+            self.assertEqual(learning_service.course_date(before), dt.date(2026, 10, 27))
+            self.assertEqual(learning_service.course_date(after), dt.date(2026, 10, 28))
+
+    def test_dashboard_displays_selected_course_day(self):
+        import app as dashboard_app
+
+        with patch("app.get_weather", return_value={}), \
+             patch.object(learning_service, "DATA_FILE", self.data_file), \
+             patch.object(learning_service.Config, "TIMEZONE", "Asia/Shanghai"):
+            client = dashboard_app.app.test_client()
+            for value, weekday in [("2026-10-27T15:59:59", "星期二"),
+                                   ("2026-10-27T16:00:00", "星期三"),
+                                   ("2026-10-30T16:00:00", "星期一"),
+                                   ("2026-11-02T15:59:59", "星期一")]:
+                now = dt.datetime.fromisoformat(value).replace(tzinfo=ZoneInfo("Asia/Shanghai"))
+                with self.subTest(now=value), patch("app.datetime.datetime") as clock:
+                    clock.now.return_value = now
+                    response = client.get("/dashboard")
+                    self.assertEqual(response.status_code, 200)
+                    self.assertIn(f"{weekday}的课程", response.get_data(as_text=True))
 
     def test_thursday_plan_adds_course_supplies_and_pinyin(self):
         target = dt.date(2026, 10, 22)
