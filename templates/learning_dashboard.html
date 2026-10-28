@@ -23,12 +23,12 @@
     .weather-day span { color: #444; font-size: 12px; margin-top: 2px; }
     .content { height: 418px; display: grid; grid-template-columns: minmax(0, 2.1fr) minmax(0, 1fr); gap: 18px; padding-top: 16px; }
     .homework { min-width: 0; height: 402px; overflow: hidden; }
-    .tasks { max-height: 375px; overflow: hidden; }
+    .tasks { max-height: 375px; overflow: hidden; display: flex; flex-direction: column; gap: var(--task-gap, 0px); }
     .side { border-left: 1px solid #aaa; padding-left: 18px; display: flex; flex-direction: column; }
     .section-title { height: 27px; display: flex; align-items: center; gap: 9px; font-size: 18px; font-weight: 800; }
     .section-title:before { content: ""; width: 5px; height: 22px; background: #141414; }
     .count { margin-left: auto; color: #555; font-size: 13px; font-weight: 700; }
-    .task { padding: 7px 4px 8px; border-bottom: 1px solid #cfcfc9; overflow-wrap: anywhere; }
+    .task { padding: 7px 4px 8px; border-bottom: 1px solid #cfcfc9; overflow-wrap: anywhere; flex-shrink: 0; }
     .task-reading { font-size: 13px; color: #555; line-height: 18px; overflow-wrap: anywhere; }
     .task-text { font-size: 26px; font-weight: 800; line-height: 32px; }
     .task-ruby { display: flex; flex-wrap: wrap; align-content: flex-start; column-gap: 2px; }
@@ -85,6 +85,12 @@
     const height = () => rows.reduce((sum, row) => sum + row.getBoundingClientRect().height, 0);
     if (height() > 375) section.classList.add('compact');
     window.homeworkOverflow = height() > 375;
+    // 优先保证作业完整显示，再用剩余空间拉开各项；最多增加24px间距。
+    // 空间紧张时自动回到零附加间距，不压缩每项实际需要的高度。
+    if (!window.homeworkOverflow && rows.length > 1) {
+      const gap = Math.min(24, Math.floor((375 - height()) / (rows.length - 1)));
+      tasks.style.setProperty('--task-gap', `${gap}px`);
+    }
     if (window.homeworkOverflow) {
       tasks.style.maxHeight = '355px';
       const bottom = tasks.getBoundingClientRect().top + 355;
