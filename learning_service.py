@@ -223,11 +223,29 @@ def _paper_reminders(homework, subjects):
 
 def _reminders(carry, homework, subjects):
     normalized = []
+    paper_subjects = []
     for item in carry:
         if re.fullmatch(r"(?:语文|数学)(?:课本|作业)", item):
             item = "带" + item
+        # 兼容已经保存的独立小卷提醒和合并后的提醒，重复处理不会重复添加。
+        paper = re.fullmatch(r"带(.+?)小卷", item)
+        combined = re.fullmatch(r"带(.+?)作业，带小卷", item)
+        if paper and not combined:
+            paper_subjects.append(paper.group(1))
+            continue
+        if combined:
+            paper_subjects.append(combined.group(1))
+            item = f"带{combined.group(1)}作业"
         normalized.append(item)
-    return list(dict.fromkeys(normalized + _paper_reminders(homework, subjects)))
+    paper_subjects.extend(item[1:-2] for item in _paper_reminders(homework, subjects))
+    for subject in dict.fromkeys(paper_subjects):
+        base = f"带{subject}作业"
+        merged = f"{base}，带小卷"
+        if base in normalized:
+            normalized = [merged if item == base else item for item in normalized]
+        else:
+            normalized.append(merged)
+    return list(dict.fromkeys(normalized))
 
 
 def get_plan(target_date=None, path=None):

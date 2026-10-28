@@ -127,10 +127,21 @@ class LearningServiceTests(unittest.TestCase):
             "homework": "语文：完成试卷\n订正小卷\n数学：完成卷子\n科学：完成小卷",
             "extras": "天气冷，穿厚衣服"}, target, self.data_file)
         carry = learning_service.get_plan(target, self.data_file)["carry"]
-        for item in ["带语文作业", "带数学作业", "带语文小卷", "带数学小卷", "带科学小卷", "天气冷，穿厚衣服"]:
+        for item in ["带语文作业，带小卷", "带数学作业，带小卷", "带科学作业，带小卷", "天气冷，穿厚衣服"]:
             self.assertIn(item, carry)
-        self.assertEqual(carry.count("带语文小卷"), 1)
+        self.assertEqual(carry.count("带语文作业，带小卷"), 1)
+        for subject in ("语文", "数学", "科学"):
+            self.assertNotIn(f"带{subject}小卷", carry)
+            self.assertNotIn(f"带{subject}作业", carry)
         self.assertEqual(learning_service.get_plan(target + dt.timedelta(days=1), self.data_file)["carry"], carry)
+
+    def test_saved_paper_reminders_merge_in_place_without_duplicates(self):
+        carry = ["带语文课本", "带语文作业", "带语文小卷",
+                 "带数学作业，带小卷", "带数学作业", "水壶"]
+        expected = ["带语文课本", "带语文作业，带小卷", "带数学作业，带小卷", "水壶"]
+        result = learning_service._reminders(carry, ["语文：订正试卷"], [])
+        self.assertEqual(result, expected)
+        self.assertEqual(learning_service._reminders(result, [], []), expected)
 
 
 if __name__ == "__main__":
